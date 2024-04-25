@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cliente Web Socket</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css">
+    <style>
+        .timestamp {
+            font-size:  65%; /* Tamaño de fuente más pequeño */
+            margin-left: 0.5em; /* Espaciado a la izquierda para separarlo del contenido del mensaje */
+            font-weight: bold;
+        }
+        .mensaje-propio {
+            background-color: #DCF8C6; /* Color de fondo para mensajes propios */
+            border-radius: 10px;
+        }
+
+        .mensaje-ajeno {
+            background-color: #e0e0e0; /* Color de fondo para mensajes ajenos */
+            border-radius: 10px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@5.0.0/bundles/stomp.umd.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="chat-windows" class="row"></div>
+        <div class="row mt-3">
+            <div class="col">
+                <button id="btnNewChat" class="btn btn-primary">Nuevo Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatWindowsContainer = document.getElementById('chat-windows');
+            const btnNewChat = document.getElementById('btnNewChat');
+            let chatWindowCount = 0; // Contador para identificadores únicos de ventana de chat
+
+            const openNewChatWindow = () => {
+                chatWindowCount++; // Incrementar el contador de ventanas de chat
+                const chatWindowId = `chat-window-${chatWindowCount}`; // Identificador único de la ventana de chat
+
+                const chatWindow = document.createElement('div');
+                chatWindow.id = chatWindowId; // Asignar el identificador único
+                chatWindow.classList.add('col-md-6', 'mb-3');
+
+                const chatWindowContent = `
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Chat Dev</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" placeholder="Nombre" id="txtNombre-${chatWindowId}">
+                        </div>
+                        <ul class="list-group mb-3" id="ULMensajes-${chatWindowId}"></ul>
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="Escribe tu mensaje..." id="txtMensaje-${chatWindowId}">
+                            <div class="input-group-append">
+                                <button class="btn btn-primary" data-chat-window="${chatWindowId}" id="btnEnviar">
+                                    <i class="fas fa-paper-plane"></i> Enviar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+
+                chatWindow.innerHTML = chatWindowContent;
+                chatWindowsContainer.appendChild(chatWindow);
+
+                const txtMensaje = chatWindow.querySelector(`#txtMensaje-${chatWindowId}`);
+                const btnEnviar = chatWindow.querySelector('#btnEnviar');
+                const ULMensajes = chatWindow.querySelector(`#ULMensajes-${chatWindowId}`);
+                const txtNombre = chatWindow.querySelector(`#txtNombre-${chatWindowId}`);
+
+                let stompCliente = new StompJs.Client({
+                    webSocketFactory: () => new WebSocket('ws://localhost:8080/chat')
+                });
+
+                const onConnectSocket = () => {
+                    stompCliente.subscribe('/topic/messages', (mensaje) => {
+                        mostrarMensaje(mensaje.body, chatWindowId);
+                    });
+                };
+
+                const onWebSocketClose = () => {
+                    if (stompCliente !== null) {
+                        stompCliente.deactivate();
+                    }
+                };
+
+                const conectarWS = () => {
+                    onWebSocketClose();
+                    stompCliente.onConnect = onConnectSocket;
+                    stompCliente.onWebSocketClose = onWebSocketClose;
+                    stompCliente.activate();
+                };
+
+                const enviarMensaje = (chatId) => {
+                    stompCliente.publish({
+                        destination: '/app/send',
+                        body: JSON.stringify({
+                            contenido: txtMensaje.value,
+                            nombre: txtNombre.value
+                        })
+                    });
+                    txtMensaje.value = ''; 
+                };
+
+                const mostrarMensajesdec = (mensaje, chatId) => {
+                    const body = JSON.parse(mensaje);
+                    const mensajeLI = document.createElement('li');
+                    mensajeLI.classList.add('list-group-item');
+
+                    const nombreUsuarioActual = txtNombre.value;
+                    console.log(nombreUsuarioActual);
+
+                    // Agregar clase CSS diferente para mensajes propios y ajenos
+                    if (body.nombre === nombreUsuarioActual) {
+                        mensajeLI.classList.add('mensaje-propio');
+                        mensajeLI.innerHTML = `${body.contenido} <span class="timestamp">${new Date().toLocaleString()}</span>`;
+                    } else {
+                        mensajeLI.classList.add('mensaje-ajeno');
+                        mensajeLI.innerHTML = `<strong>${body.nombre}:</strong> ${body.contenido}`;
+                    }
+
+                    document.getElementById(`ULMensajes-${chatId}`).appendChild(mensajeLI);
+                };
+
+                const mostrarMensaje = (mensaje) => {
+                    const body = JSON.parse(mensaje);
+                    const mensajeLI = document.createElement('li');
+                    mensajeLI.classList.add('list-group-item');
+                    const nombreUsuarioActual = txtNombre.value;
+                    // Agregar clase CSS diferente para mensajes propios y ajenos
+                    if (body.nombre === nombreUsuarioActual) {
+                        mensajeLI.classList.add('mensaje-propio');
+                    } else {
+                        const strongElement = document.createElement('strong');
+                        strongElement.textContent = `${body.nombre}: `;
+                        mensajeLI.appendChild(strongElement);
+                        mensajeLI.classList.add('mensaje-ajeno');
+                    }
+
+                    // Agregar el contenido del mensaje al <li>
+                    mensajeLI.appendChild(document.createTextNode(body.contenido));
+
+                    // Agregar la fecha y hora con un tamaño de fuente más pequeño directamente en línea
+                    mensajeLI.appendChild(document.createElement('br')); // Salto de línea antes de la fecha y hora
+                    const timestampSpan = document.createElement('span');
+                    timestampSpan.classList.add('timestamp');
+                    timestampSpan.textContent = `${body.fechaEnvio}`
+
+                    mensajeLI.appendChild(timestampSpan); // Fecha y hora en línea con el contenido del mensaje
+
+                    ULMensajes.appendChild(mensajeLI);
+                };
+
+                btnEnviar.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    enviarMensaje(chatWindowId);
+                });
+
+                conectarWS();
+            };
+
+            btnNewChat.addEventListener('click', openNewChatWindow);
+        });
+    </script>
+</body>
+</html>
