@@ -1,0 +1,5 @@
+spring:
+  data:
+    mongodb:
+      database: apiChat
+      uri: mongodb+srv://jarojasm:qNC8VSu9v0y8QdaE@apibackend.sdxanc8.mongodb.net/?retryWrites=true&w=majority&appName=apiBackend
